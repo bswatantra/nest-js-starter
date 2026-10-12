@@ -107,5 +107,31 @@ describe('CacheService & normalizePagination', () => {
       limit: 50,
       skip: 0,
     });
+    expect(normalizePagination(1, 20, 42)).toEqual({
+      page: 1,
+      limit: 20,
+      skip: 1,
+      cursor: 42,
+    });
+    expect(normalizePagination(2, 20, -1)).toEqual({
+      page: 2,
+      limit: 20,
+      skip: 20,
+    });
+  });
+
+  it('invalidates matching prefixes and clears store', () => {
+    const cache = new CacheService(10, 10_000);
+    cache.set('users:list:1:50', ['u1']);
+    cache.set('users:list:cursor:1:50', ['u2']);
+    cache.set('posts:id:1', { id: 1 });
+
+    cache.invalidatePrefix('users:list:');
+    expect(cache.get('users:list:1:50')).toBeUndefined();
+    expect(cache.get('users:list:cursor:1:50')).toBeUndefined();
+    expect(cache.get('posts:id:1')).toEqual({ id: 1 });
+
+    cache.clear();
+    expect(cache.get('posts:id:1')).toBeUndefined();
   });
 });

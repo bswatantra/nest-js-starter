@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { getAppConfig } from '@/config/app.config';
 import {
   getDatabaseConfig,
   getDatabaseConnection,
 } from '@/config/database.config';
 
-describe('Database Configuration (Multi-DB)', () => {
+describe('App & Database Configuration (Multi-DB)', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
@@ -16,10 +17,20 @@ describe('Database Configuration (Multi-DB)', () => {
     delete process.env['POSTGRESQL_DATABASE_URL'];
     delete process.env['DB_POOL_SIZE'];
     delete process.env['DB_POOL_TIMEOUT'];
+    delete process.env['ALLOWED_ORIGINS'];
   });
 
   afterEach(() => {
     process.env = originalEnv;
+  });
+
+  it('parses app config and ALLOWED_ORIGINS list', () => {
+    expect(getAppConfig().allowedOrigins).toBe(false);
+    process.env['ALLOWED_ORIGINS'] = 'http://localhost:5173, https://app.com ';
+    expect(getAppConfig().allowedOrigins).toEqual([
+      'http://localhost:5173',
+      'https://app.com',
+    ]);
   });
 
   it('defaults to sqlite connection when DB_CONNECTION is not specified', () => {

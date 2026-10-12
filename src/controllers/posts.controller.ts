@@ -36,8 +36,9 @@ export class PostsController {
   async findAll(
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('cursor') cursor?: number,
   ): Promise<PostWithAuthorSummaryModel[]> {
-    return this.postsService.findAll(page, limit);
+    return this.postsService.findAll(page, limit, cursor);
   }
 
   @Get(ROUTES.POSTS.BY_USER)

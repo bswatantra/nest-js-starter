@@ -40,24 +40,32 @@ export class UsersService {
     }
   }
 
-  async findAll(page = 1, limit = 50): Promise<UserWithCountModel[]> {
+  async findAll(
+    page = 1,
+    limit = 50,
+    cursor?: number,
+  ): Promise<UserWithCountModel[]> {
     const {
       page: safePage,
       limit: safeLimit,
       skip,
-    } = normalizePagination(page, limit);
+      cursor: safeCursor,
+    } = normalizePagination(page, limit, cursor);
 
-    return this.readThrough(CACHE_KEYS.userList(safePage, safeLimit), () =>
-      this.prisma.user.findMany({
-        skip,
-        take: safeLimit,
-        include: {
-          _count: {
-            select: { posts: true },
+    return this.readThrough(
+      CACHE_KEYS.userList(safePage, safeLimit, safeCursor),
+      () =>
+        this.prisma.user.findMany({
+          skip,
+          take: safeLimit,
+          ...(safeCursor !== undefined ? { cursor: { id: safeCursor } } : {}),
+          include: {
+            _count: {
+              select: { posts: true },
+            },
           },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
+          orderBy: { createdAt: 'desc' },
+        }),
     );
   }
 

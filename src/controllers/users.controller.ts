@@ -34,8 +34,9 @@ export class UsersController {
   async findAll(
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('cursor') cursor?: number,
   ): Promise<UserWithCountModel[]> {
-    return this.usersService.findAll(page, limit);
+    return this.usersService.findAll(page, limit, cursor);
   }
 
   @Get(ROUTES.USERS.BY_ID)

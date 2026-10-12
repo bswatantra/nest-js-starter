@@ -10,6 +10,7 @@ export interface PaginationParams {
   page: number;
   limit: number;
   skip: number;
+  cursor?: number;
 }
 
 export const CACHE_KEYS = {
@@ -19,11 +20,15 @@ export const CACHE_KEYS = {
   POSTS_LIST_PREFIX: 'posts:list:',
   POSTS_ID_PREFIX: 'posts:id:',
   POSTS_AUTHOR_PREFIX: 'posts:author:',
-  userList: (page: number, limit: number): string =>
-    `users:list:${page}:${limit}`,
+  userList: (page: number, limit: number, cursor?: number): string =>
+    cursor !== undefined
+      ? `users:list:cursor:${cursor}:${limit}`
+      : `users:list:${page}:${limit}`,
   userId: (id: number): string => `users:id:${id}`,
-  postList: (page: number, limit: number): string =>
-    `posts:list:${page}:${limit}`,
+  postList: (page: number, limit: number, cursor?: number): string =>
+    cursor !== undefined
+      ? `posts:list:cursor:${cursor}:${limit}`
+      : `posts:list:${page}:${limit}`,
   postId: (id: number): string => `posts:id:${id}`,
   postByAuthor: (authorId: number): string => `posts:author:${authorId}`,
 } as const;
@@ -31,6 +36,7 @@ export const CACHE_KEYS = {
 export function normalizePagination(
   rawPage = 1,
   rawLimit = 50,
+  rawCursor?: number,
 ): PaginationParams {
   const parsedPage = Number(rawPage);
   const parsedLimit = Number(rawLimit);
@@ -40,6 +46,18 @@ export function normalizePagination(
     Number.isFinite(parsedLimit) && parsedLimit >= 1
       ? Math.min(100, Math.floor(parsedLimit))
       : 50;
+
+  if (rawCursor !== undefined) {
+    const parsedCursor = Number(rawCursor);
+    if (Number.isFinite(parsedCursor) && parsedCursor >= 1) {
+      return {
+        page,
+        limit,
+        skip: 1,
+        cursor: Math.floor(parsedCursor),
+      };
+    }
+  }
 
   return {
     page,

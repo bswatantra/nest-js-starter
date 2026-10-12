@@ -54,24 +54,32 @@ export class PostsService {
     }
   }
 
-  async findAll(page = 1, limit = 50): Promise<PostWithAuthorSummaryModel[]> {
+  async findAll(
+    page = 1,
+    limit = 50,
+    cursor?: number,
+  ): Promise<PostWithAuthorSummaryModel[]> {
     const {
       page: safePage,
       limit: safeLimit,
       skip,
-    } = normalizePagination(page, limit);
+      cursor: safeCursor,
+    } = normalizePagination(page, limit, cursor);
 
-    return this.readThrough(CACHE_KEYS.postList(safePage, safeLimit), () =>
-      this.prisma.post.findMany({
-        skip,
-        take: safeLimit,
-        include: {
-          author: {
-            select: { id: true, name: true, email: true },
+    return this.readThrough(
+      CACHE_KEYS.postList(safePage, safeLimit, safeCursor),
+      () =>
+        this.prisma.post.findMany({
+          skip,
+          take: safeLimit,
+          ...(safeCursor !== undefined ? { cursor: { id: safeCursor } } : {}),
+          include: {
+            author: {
+              select: { id: true, name: true, email: true },
+            },
           },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
+          orderBy: { createdAt: 'desc' },
+        }),
     );
   }
 
