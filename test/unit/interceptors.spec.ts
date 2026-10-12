@@ -61,6 +61,19 @@ describe('Interceptors & Middleware', () => {
 
   it('logs successful and failed HTTP requests in LoggingInterceptor', async () => {
     const interceptor = new LoggingInterceptor();
+    const logSpy = vi
+      .spyOn(
+        (interceptor as unknown as { logger: { log: () => void } }).logger,
+        'log',
+      )
+      .mockImplementation(() => undefined);
+    const errSpy = vi
+      .spyOn(
+        (interceptor as unknown as { logger: { error: () => void } }).logger,
+        'error',
+      )
+      .mockImplementation(() => undefined);
+
     const context = {
       switchToHttp: () => ({
         getRequest: () => ({ method: 'GET', url: '/users' }),
@@ -71,6 +84,7 @@ describe('Interceptors & Middleware', () => {
     expect(await lastValueFrom(interceptor.intercept(context, okHandler))).toBe(
       'ok',
     );
+    expect(logSpy).toHaveBeenCalledTimes(1);
 
     const errHandler: CallHandler = {
       handle: () => throwError(() => new Error('Boom')),
@@ -78,5 +92,6 @@ describe('Interceptors & Middleware', () => {
     await expect(
       lastValueFrom(interceptor.intercept(context, errHandler)),
     ).rejects.toThrow('Boom');
+    expect(errSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -19,7 +19,7 @@ describe('HealthController', () => {
 
   beforeEach(async () => {
     const app: TestingModule = await Test.createTestingModule({
-      imports: [TerminusModule],
+      imports: [TerminusModule.forRoot({ logger: false })],
       controllers: [HealthController],
       providers: [
         HealthService,
