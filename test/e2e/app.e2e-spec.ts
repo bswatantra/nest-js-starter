@@ -49,9 +49,12 @@ describe('App (e2e)', () => {
 
       expect(res.body).toMatchObject({
         status: 'ok',
+        info: {
+          database: {
+            status: 'up',
+          },
+        },
       });
-      expect(typeof res.body.uptime).toBe('number');
-      expect(typeof res.body.timestamp).toBe('string');
     });
   });
 
