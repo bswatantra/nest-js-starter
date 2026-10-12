@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { PostsController } from '@/controllers/posts.controller';
 import { PostsService } from '@/services/posts.service';
+import { handlePrismaError } from '@/models/prisma.service';
 
-describe('PostsController', () => {
+describe('PostsController & Error Handling', () => {
   let controller: PostsController;
   let service: PostsService;
 
@@ -64,5 +67,18 @@ describe('PostsController', () => {
     const result = await controller.findByAuthor(1);
     expect(result).toEqual(expected);
     expect(mockPostsService.findByAuthor).toHaveBeenCalledWith(1);
+  });
+
+  it('maps Prisma P2003 foreign key error to NotFoundException (404)', () => {
+    const prismaError = new Prisma.PrismaClientKnownRequestError(
+      'Foreign key constraint failed',
+      { code: 'P2003', clientVersion: '6.19.3' },
+    );
+
+    expect(() =>
+      handlePrismaError(prismaError, {
+        foreignKeyNotFound: 'Author with ID 42 not found',
+      }),
+    ).toThrow(NotFoundException);
   });
 });

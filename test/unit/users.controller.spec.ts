@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { UsersController } from '@/controllers/users.controller';
 import { UsersService } from '@/services/users.service';
+import { handlePrismaError } from '@/models/prisma.service';
 
-describe('UsersController', () => {
+describe('UsersController & Error Handling', () => {
   let controller: UsersController;
   let service: UsersService;
 
@@ -58,5 +61,31 @@ describe('UsersController', () => {
     const result = await controller.findOne(1);
     expect(result).toEqual(expected);
     expect(mockUsersService.findOne).toHaveBeenCalledWith(1);
+  });
+
+  it('maps Prisma P2002 error to ConflictException (409)', () => {
+    const prismaError = new Prisma.PrismaClientKnownRequestError(
+      'Unique constraint failed',
+      { code: 'P2002', clientVersion: '6.19.3' },
+    );
+
+    expect(() =>
+      handlePrismaError(prismaError, {
+        conflict: 'User with email "dup@example.com" already exists',
+      }),
+    ).toThrow(ConflictException);
+  });
+
+  it('maps Prisma P2025 error to NotFoundException (404)', () => {
+    const prismaError = new Prisma.PrismaClientKnownRequestError(
+      'Record not found',
+      { code: 'P2025', clientVersion: '6.19.3' },
+    );
+
+    expect(() =>
+      handlePrismaError(prismaError, {
+        notFound: 'User with ID 99 not found',
+      }),
+    ).toThrow(NotFoundException);
   });
 });

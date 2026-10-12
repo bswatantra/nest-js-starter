@@ -1,16 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '@/app.module';
 import { PrismaService } from '@/models/prisma.service';
+import { CacheService } from '@/services/cache.service';
 
 describe('App (e2e)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  let cache: CacheService;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -18,11 +20,16 @@ describe('App (e2e)', () => {
     app = moduleFixture.createNestApplication();
     await app.init();
     prisma = app.get<PrismaService>(PrismaService);
+    cache = app.get<CacheService>(CacheService);
   });
 
   afterEach(async () => {
+    cache.clear();
     await prisma.post.deleteMany();
     await prisma.user.deleteMany();
+  });
+
+  afterAll(async () => {
     await app.close();
   });
 
