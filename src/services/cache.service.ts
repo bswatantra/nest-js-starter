@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Injectable } from '@nestjs/common';
 
 interface CacheEntry<T> {
@@ -9,7 +10,7 @@ interface CacheEntry<T> {
 export class CacheService {
   private readonly store = new Map<string, CacheEntry<unknown>>();
   private readonly maxEntries = 1000;
-  private readonly defaultTtlMs = 30_000; // 30 seconds
+  private readonly defaultTtlMs = Number(process.env['CACHE_TTL_MS'] ?? 5_000);
 
   get<T>(key: string): T | undefined {
     const entry = this.store.get(key);
@@ -37,6 +38,10 @@ export class CacheService {
       value,
       expiresAt: Date.now() + ttlMs,
     });
+  }
+
+  delete(key: string): void {
+    this.store.delete(key);
   }
 
   invalidatePrefix(prefix: string): void {

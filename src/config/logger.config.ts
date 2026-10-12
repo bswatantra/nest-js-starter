@@ -65,8 +65,11 @@ export class AppLogger extends ConsoleLogger {
   private readonly errorFd: number | undefined;
 
   constructor(config?: LoggerConfig) {
-    super();
-    this.loggerConfig = config ?? getLoggerConfig();
+    const resolvedConfig = config ?? getLoggerConfig();
+    super({
+      colors: resolvedConfig.writeToStderr,
+    });
+    this.loggerConfig = resolvedConfig;
 
     if (this.loggerConfig.writeToFile) {
       mkdirSync(dirname(this.loggerConfig.logFilePath), { recursive: true });
@@ -113,7 +116,9 @@ export class AppLogger extends ConsoleLogger {
       }
 
       if (this.loggerConfig.writeToFile && this.logFd !== undefined) {
-        const plainMessage = stripAnsi(formattedMessage);
+        const plainMessage = this.loggerConfig.writeToStderr
+          ? stripAnsi(formattedMessage)
+          : formattedMessage;
         writeSync(this.logFd, plainMessage);
 
         if (
@@ -142,7 +147,9 @@ export class AppLogger extends ConsoleLogger {
       this.logFd !== undefined &&
       this.errorFd !== undefined
     ) {
-      const plainStack = stripAnsi(formattedStack);
+      const plainStack = this.loggerConfig.writeToStderr
+        ? stripAnsi(formattedStack)
+        : formattedStack;
       writeSync(this.logFd, plainStack);
       writeSync(this.errorFd, plainStack);
     }

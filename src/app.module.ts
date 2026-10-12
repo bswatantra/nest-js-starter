@@ -49,7 +49,7 @@ import { LoggingInterceptor } from '@/interceptors';
         forbidNonWhitelisted: true,
         stopAtFirstError: true,
         transform: true,
-        transformOptions: { enableImplicitConversion: true },
+        validateCustomDecorators: false,
       }),
     },
 

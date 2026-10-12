@@ -59,6 +59,9 @@ export class PrismaService
       await this.$queryRawUnsafe('PRAGMA cache_size = -64000;');
       await this.$queryRawUnsafe('PRAGMA mmap_size = 268435456;');
       await this.$queryRawUnsafe('PRAGMA busy_timeout = 5000;');
+    } else {
+      // Pre-warm TCP/TLS database connection pool so the first request pays zero handshake latency
+      await this.$queryRawUnsafe('SELECT 1;');
     }
 
     this.logger.log(

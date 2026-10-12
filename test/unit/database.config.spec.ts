@@ -86,7 +86,7 @@ describe('Database Configuration (Multi-DB)', () => {
     expect(pgConn.port).toBe(5432);
     expect(pgConn.database).toBe('postgres');
     expect(pgConn.url).toBe(
-      'postgres://myuser:mypass@pooled.db.prisma.io:5432/postgres?sslmode=require',
+      'postgres://myuser:mypass@pooled.db.prisma.io:5432/postgres?sslmode=require&pgbouncer=true',
     );
   });
 

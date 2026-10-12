@@ -97,6 +97,14 @@ function parseUrlMetadata(rawUrl: string | undefined): ParsedUrlMetadata {
   }
 }
 
+function ensurePgBouncerParam(url: string, host: string): string {
+  if (!host.includes('pooled.') || url.includes('pgbouncer=')) {
+    return url;
+  }
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}pgbouncer=true`;
+}
+
 function buildMysqlUrl(
   config: Omit<MysqlConnectionConfig, 'url'>,
   appendPoolParams: boolean,
@@ -243,9 +251,13 @@ export function getDatabaseConfig(): DatabaseConfig {
     poolSize,
     poolTimeout,
   };
-  const postgresqlUrl =
+  const rawPostgresqlUrl =
     explicitPostgresqlUrl ??
     buildPostgresqlUrl(postgresqlBase, appendPoolParams);
+  const postgresqlUrl = ensurePgBouncerParam(
+    rawPostgresqlUrl,
+    postgresqlBase.host,
+  );
 
   const postgresqlConfig: PostgresqlConnectionConfig = {
     ...postgresqlBase,

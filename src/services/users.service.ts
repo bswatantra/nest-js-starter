@@ -16,7 +16,8 @@ import type { CreateUserDto, UpdateUserDto } from '@/dto';
 
 @Injectable()
 export class UsersService {
-  private static readonly CACHE_PREFIX = 'users:';
+  private static readonly CACHE_LIST_PREFIX = 'users:list:';
+  private static readonly CACHE_ID_PREFIX = 'users:id:';
 
   constructor(
     private readonly prisma: PrismaService,
@@ -31,7 +32,11 @@ export class UsersService {
           name: createUserDto.name,
         },
       });
-      this.cache?.invalidatePrefix(UsersService.CACHE_PREFIX);
+      this.cache?.invalidatePrefix(UsersService.CACHE_LIST_PREFIX);
+      this.cache?.set<UserWithPostsModel>(
+        `${UsersService.CACHE_ID_PREFIX}${user.id}`,
+        { ...user, posts: [] },
+      );
       return user;
     } catch (error: unknown) {
       if (
@@ -47,7 +52,7 @@ export class UsersService {
   }
 
   async findAll(page = 1, limit = 50): Promise<UserWithCountModel[]> {
-    const cacheKey = `${UsersService.CACHE_PREFIX}list:${page}:${limit}`;
+    const cacheKey = `${UsersService.CACHE_LIST_PREFIX}${page}:${limit}`;
     const cached = this.cache?.get<UserWithCountModel[]>(cacheKey);
     if (cached) {
       return cached;
@@ -70,7 +75,7 @@ export class UsersService {
   }
 
   async findOne(id: number): Promise<UserWithPostsModel> {
-    const cacheKey = `${UsersService.CACHE_PREFIX}id:${id}`;
+    const cacheKey = `${UsersService.CACHE_ID_PREFIX}${id}`;
     const cached = this.cache?.get<UserWithPostsModel>(cacheKey);
     if (cached) {
       return cached;
@@ -79,7 +84,10 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
-        posts: true,
+        posts: {
+          take: 50,
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
 
@@ -101,7 +109,10 @@ export class UsersService {
         where: { id },
         data,
       });
-      this.cache?.invalidatePrefix(UsersService.CACHE_PREFIX);
+      this.cache?.delete(`${UsersService.CACHE_ID_PREFIX}${id}`);
+      this.cache?.invalidatePrefix(UsersService.CACHE_LIST_PREFIX);
+      this.cache?.invalidatePrefix('posts:list:');
+      this.cache?.invalidatePrefix('posts:id:');
       return updated;
     } catch (error: unknown) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -121,7 +132,9 @@ export class UsersService {
   async remove(id: number): Promise<{ message: string }> {
     try {
       await this.prisma.user.delete({ where: { id } });
-      this.cache?.invalidatePrefix(UsersService.CACHE_PREFIX);
+      this.cache?.delete(`${UsersService.CACHE_ID_PREFIX}${id}`);
+      this.cache?.invalidatePrefix(UsersService.CACHE_LIST_PREFIX);
+      this.cache?.invalidatePrefix('posts:');
       return { message: `User with ID ${id} successfully deleted` };
     } catch (error: unknown) {
       if (

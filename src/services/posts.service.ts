@@ -11,16 +11,25 @@ import type { CreatePostDto, UpdatePostDto } from '@/dto';
 
 @Injectable()
 export class PostsService {
-  private static readonly CACHE_PREFIX = 'posts:';
+  private static readonly CACHE_LIST_PREFIX = 'posts:list:';
+  private static readonly CACHE_ID_PREFIX = 'posts:id:';
+  private static readonly CACHE_AUTHOR_PREFIX = 'posts:author:';
 
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly cache?: CacheService,
   ) {}
 
-  private invalidateCaches(): void {
-    this.cache?.invalidatePrefix(PostsService.CACHE_PREFIX);
-    this.cache?.invalidatePrefix('users:');
+  private invalidateAuthorAndListCaches(authorId?: number): void {
+    this.cache?.invalidatePrefix(PostsService.CACHE_LIST_PREFIX);
+    this.cache?.invalidatePrefix('users:list:');
+    if (authorId !== undefined) {
+      this.cache?.delete(`${PostsService.CACHE_AUTHOR_PREFIX}${authorId}`);
+      this.cache?.delete(`users:id:${authorId}`);
+    } else {
+      this.cache?.invalidatePrefix(PostsService.CACHE_AUTHOR_PREFIX);
+      this.cache?.invalidatePrefix('users:id:');
+    }
   }
 
   async create(createPostDto: CreatePostDto): Promise<PostWithAuthorModel> {
@@ -36,7 +45,8 @@ export class PostsService {
           author: true,
         },
       });
-      this.invalidateCaches();
+      this.invalidateAuthorAndListCaches(post.authorId);
+      this.cache?.set(`${PostsService.CACHE_ID_PREFIX}${post.id}`, post);
       return post;
     } catch (error: unknown) {
       if (
@@ -52,7 +62,7 @@ export class PostsService {
   }
 
   async findAll(page = 1, limit = 50): Promise<PostWithAuthorSummaryModel[]> {
-    const cacheKey = `${PostsService.CACHE_PREFIX}list:${page}:${limit}`;
+    const cacheKey = `${PostsService.CACHE_LIST_PREFIX}${page}:${limit}`;
     const cached = this.cache?.get<PostWithAuthorSummaryModel[]>(cacheKey);
     if (cached) {
       return cached;
@@ -75,7 +85,7 @@ export class PostsService {
   }
 
   async findOne(id: number): Promise<PostWithAuthorModel> {
-    const cacheKey = `${PostsService.CACHE_PREFIX}id:${id}`;
+    const cacheKey = `${PostsService.CACHE_ID_PREFIX}${id}`;
     const cached = this.cache?.get<PostWithAuthorModel>(cacheKey);
     if (cached) {
       return cached;
@@ -97,7 +107,7 @@ export class PostsService {
   }
 
   async findByAuthor(authorId: number): Promise<PostModel[]> {
-    const cacheKey = `${PostsService.CACHE_PREFIX}author:${authorId}`;
+    const cacheKey = `${PostsService.CACHE_AUTHOR_PREFIX}${authorId}`;
     const cached = this.cache?.get<PostModel[]>(cacheKey);
     if (cached) {
       return cached;
@@ -139,7 +149,8 @@ export class PostsService {
           author: true,
         },
       });
-      this.invalidateCaches();
+      this.invalidateAuthorAndListCaches(updated.authorId);
+      this.cache?.set(`${PostsService.CACHE_ID_PREFIX}${id}`, updated);
       return updated;
     } catch (error: unknown) {
       if (
@@ -154,8 +165,9 @@ export class PostsService {
 
   async remove(id: number): Promise<{ message: string }> {
     try {
-      await this.prisma.post.delete({ where: { id } });
-      this.invalidateCaches();
+      const deleted = await this.prisma.post.delete({ where: { id } });
+      this.cache?.delete(`${PostsService.CACHE_ID_PREFIX}${id}`);
+      this.invalidateAuthorAndListCaches(deleted.authorId);
       return { message: `Post with ID ${id} successfully deleted` };
     } catch (error: unknown) {
       if (
