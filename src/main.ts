@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from '@/app.module';
-import { getAppConfig } from '@/config';
+import { AppLogger, getAppConfig } from '@/config';
 import { compressionMiddleware } from '@/interceptors';
 import { ObserveInstrument } from './observe';
 
@@ -12,6 +12,7 @@ export async function bootstrap(): Promise<void> {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     instrument: ObserveInstrument,
+    logger: new AppLogger(),
   });
 
   app.disable('x-powered-by');
