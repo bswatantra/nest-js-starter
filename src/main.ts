@@ -18,6 +18,7 @@ export async function bootstrap(): Promise<void> {
 
   app.disable('x-powered-by');
   app.set('etag', false);
+  app.useBodyParser('json', { limit: '100kb' });
   app.use(compressionMiddleware);
   app.enableShutdownHooks();
 

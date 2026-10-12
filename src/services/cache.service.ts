@@ -80,6 +80,8 @@ export class CacheService {
   }
 
   set<T>(key: string, value: T, ttlMs: number = this.defaultTtlMs): void {
+    this.inFlight.delete(key);
+
     if (this.store.has(key)) {
       this.store.delete(key);
     } else if (this.store.size >= this.maxEntries) {
@@ -112,11 +114,15 @@ export class CacheService {
 
     const fetchPromise = fetcher()
       .then((value) => {
-        this.set(key, value, ttlMs);
+        if (this.inFlight.get(key) === fetchPromise) {
+          this.set(key, value, ttlMs);
+        }
         return value;
       })
       .finally(() => {
-        this.inFlight.delete(key);
+        if (this.inFlight.get(key) === fetchPromise) {
+          this.inFlight.delete(key);
+        }
       });
 
     this.inFlight.set(key, fetchPromise);

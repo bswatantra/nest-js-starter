@@ -54,6 +54,28 @@ describe('CacheService & normalizePagination', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it('does not overwrite cache if key is invalidated while a read is in flight', async () => {
+    const cache = new CacheService(10, 10_000);
+    let resolveRead: ((val: string) => void) | undefined;
+
+    const readPromise = cache.getOrSet(
+      'user:1',
+      () =>
+        new Promise<string>((resolve) => {
+          resolveRead = resolve;
+        }),
+    );
+
+    // Concurrent delete/invalidation happens before the in-flight read finishes
+    cache.delete('user:1');
+
+    resolveRead?.('stale-value');
+    const result = await readPromise;
+
+    expect(result).toBe('stale-value');
+    expect(cache.get<string>('user:1')).toBeUndefined();
+  });
+
   it('clamps pagination bounds and handles invalid inputs safely', () => {
     expect(normalizePagination(1, 50)).toEqual({
       page: 1,
