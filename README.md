@@ -1,6 +1,6 @@
 # Nest Learning — High-Performance NestJS + Prisma API
 
-A strictly typed (zero `any`), layered NestJS v12 REST API powered by **Bun**, **Prisma ORM** (with automatic multi-database support for SQLite, MySQL, and PostgreSQL), **NestJS Observe** APM, in-memory **O(1) LRU + Singleflight** caching, and native **Brotli/Gzip** compression.
+A strictly typed (zero `any`), layered NestJS v12 REST API powered by **Bun**, **Prisma ORM** (with automatic multi-database support for SQLite, MySQL, and PostgreSQL), **NestJS Observe** APM, **Terminus** database health checks, **Helmet + CORS + Throttler** security hardening, in-memory **O(1) LRU + Singleflight** caching, and native **Brotli/Gzip** compression.
 
 ---
 
@@ -39,7 +39,7 @@ A strictly typed (zero `any`), layered NestJS v12 REST API powered by **Bun**, *
 │   ├── routes/                    # Centralized route path constants
 │   │   ├── app.routes.ts
 │   │   └── index.ts
-│   ├── services/                  # Business logic & LRU/Singleflight cache
+│   ├── services/                  # Business logic, Terminus DB indicator & LRU cache
 │   │   ├── cache.service.ts
 │   │   ├── health.service.ts
 │   │   ├── users.service.ts
@@ -47,10 +47,10 @@ A strictly typed (zero `any`), layered NestJS v12 REST API powered by **Bun**, *
 │   │   └── index.ts
 │   ├── app.module.ts              # Root application module
 │   ├── cluster.ts                 # Multi-core cluster launcher
-│   ├── main.ts                    # Application bootstrap
+│   ├── main.ts                    # Application bootstrap (Helmet, CORS, Compression)
 │   └── observe.ts                 # NestJS Observe APM instrumentation
 └── test/
-    ├── unit/                      # Fast unit test suites (Vitest)
+    ├── unit/                      # Fast unit test suites (Vitest + v8 coverage)
     └── e2e/                       # End-to-end HTTP test suites
 ```
 
@@ -64,6 +64,14 @@ Copy `.env.example` to `.env` and configure your environment:
 # Application
 PORT=3000
 CACHE_TTL_MS=5000
+# CLUSTER_WORKERS=4
+
+# Security — CORS: comma-separated list of allowed origins; leave unset to block all cross-origin requests
+# ALLOWED_ORIGINS=http://localhost:5173,https://myapp.com
+
+# Security — Rate Limiting: max THROTTLE_LIMIT requests per THROTTLE_TTL_MS milliseconds per IP
+# THROTTLE_TTL_MS=60000
+# THROTTLE_LIMIT=100
 
 # Logging Channel:
 # - stderr: Terminal only
@@ -83,6 +91,8 @@ DB_USERNAME=postgres
 DB_PASSWORD=postgres
 DB_DATABASE=nest_learning
 DB_SCHEMA=public
+# DB_POOL_SIZE=10
+# DB_POOL_TIMEOUT=10
 
 # SQLite Configuration
 SQLITE_DATABASE_PATH=./dev.db
@@ -126,6 +136,9 @@ bun run lint
 # Run unit tests (Vitest)
 bun run test
 
+# Run unit tests with enforced coverage thresholds (80% lines/funcs/stmts, 75% branches)
+bun run test:cov
+
 # Run E2E tests
 bun run test:e2e
 ```
@@ -137,14 +150,15 @@ bun run test:e2e
 ### Health
 | Method | Path | Description |
 | :--- | :--- | :--- |
-| `GET` | `/` | Returns service status, timestamp, and uptime |
-| `GET` | `/health` | Returns service status, timestamp, and uptime |
+| `GET` | `/` | Lightweight static ping (`status`, `timestamp`, `uptime`) — skips DB & rate limiter |
+| `GET` | `/health` | Terminus liveness check (`SELECT 1` against DB; returns `200 OK` or `503 Service Unavailable`) |
 
 ### Users
 | Method | Path | Description |
 | :--- | :--- | :--- |
 | `POST` | `/users` | Create a new user (`{ email, name? }`) |
-| `GET` | `/users?page=1&limit=50` | List users with post counts (paginated, cached) |
+| `GET` | `/users?page=1&limit=50` | List users with post counts (offset pagination, cached) |
+| `GET` | `/users?cursor=10&limit=50` | List users after cursor ID `10` (cursor-based pagination, cached) |
 | `GET` | `/users/:id` | Get a user by ID with their recent posts |
 | `PATCH` | `/users/:id` | Update a user's `email` or `name` |
 | `DELETE` | `/users/:id` | Delete a user and cascade-delete their posts |
@@ -153,7 +167,8 @@ bun run test:e2e
 | Method | Path | Description |
 | :--- | :--- | :--- |
 | `POST` | `/posts` | Create a post (`{ title, content?, published?, authorId }`) |
-| `GET` | `/posts?page=1&limit=50` | List posts with author summary (paginated, cached) |
+| `GET` | `/posts?page=1&limit=50` | List posts with author summary (offset pagination, cached) |
+| `GET` | `/posts?cursor=10&limit=50` | List posts after cursor ID `10` (cursor-based pagination, cached) |
 | `GET` | `/posts/:id` | Get a single post by ID with author details |
 | `GET` | `/posts/user/:userId` | List all posts belonging to a specific author |
 | `PATCH` | `/posts/:id` | Update a post's `title`, `content`, or `published` status |
