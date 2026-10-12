@@ -47,7 +47,7 @@ export function compressionMiddleware(
     if (supportsBr) {
       const compressed = brotliCompressSync(buffer, {
         params: {
-          [constants.BROTLI_PARAM_QUALITY]: 4,
+          [constants.BROTLI_PARAM_QUALITY]: 1,
         },
       });
       res.setHeader('Content-Encoding', 'br');
@@ -55,7 +55,7 @@ export function compressionMiddleware(
       return originalSend(compressed);
     }
 
-    const compressed = gzipSync(buffer, { level: 6 });
+    const compressed = gzipSync(buffer, { level: 1 });
     res.setHeader('Content-Encoding', 'gzip');
     res.setHeader('Content-Length', String(compressed.length));
     return originalSend(compressed);

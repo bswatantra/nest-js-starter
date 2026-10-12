@@ -51,8 +51,14 @@ export function normalizePagination(
 @Injectable()
 export class CacheService {
   private readonly store = new Map<string, CacheEntry<unknown>>();
-  private readonly maxEntries = 1000;
-  private readonly defaultTtlMs = Number(process.env['CACHE_TTL_MS'] ?? 5_000);
+  private readonly maxEntries: number;
+  private readonly defaultTtlMs: number;
+
+  constructor(maxEntries = 1000, defaultTtlMs?: number) {
+    this.maxEntries = maxEntries;
+    this.defaultTtlMs =
+      defaultTtlMs ?? Number(process.env['CACHE_TTL_MS'] ?? 5_000);
+  }
 
   get<T>(key: string): T | undefined {
     const entry = this.store.get(key);
@@ -65,14 +71,20 @@ export class CacheService {
       return undefined;
     }
 
+    // Refresh key position for O(1) Least Recently Used (LRU) ordering
+    this.store.delete(key);
+    this.store.set(key, entry);
+
     return entry.value as T;
   }
 
   set<T>(key: string, value: T, ttlMs: number = this.defaultTtlMs): void {
-    if (this.store.size >= this.maxEntries && !this.store.has(key)) {
-      const oldestKey = this.store.keys().next().value;
-      if (oldestKey !== undefined) {
-        this.store.delete(oldestKey);
+    if (this.store.has(key)) {
+      this.store.delete(key);
+    } else if (this.store.size >= this.maxEntries) {
+      const lruKey = this.store.keys().next().value;
+      if (lruKey !== undefined) {
+        this.store.delete(lruKey);
       }
     }
 
