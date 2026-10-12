@@ -63,6 +63,7 @@ export class AppLogger extends ConsoleLogger {
   private readonly loggerConfig: LoggerConfig;
   private readonly logFd: number | undefined;
   private readonly errorFd: number | undefined;
+  private closed = false;
 
   constructor(config?: LoggerConfig) {
     const resolvedConfig = config ?? getLoggerConfig();
@@ -80,6 +81,11 @@ export class AppLogger extends ConsoleLogger {
   }
 
   close(): void {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
+
     if (this.logFd !== undefined) {
       closeSync(this.logFd);
     }
@@ -115,7 +121,11 @@ export class AppLogger extends ConsoleLogger {
         process.stderr.write(formattedMessage);
       }
 
-      if (this.loggerConfig.writeToFile && this.logFd !== undefined) {
+      if (
+        !this.closed &&
+        this.loggerConfig.writeToFile &&
+        this.logFd !== undefined
+      ) {
         const plainMessage = this.loggerConfig.writeToStderr
           ? stripAnsi(formattedMessage)
           : formattedMessage;
@@ -143,6 +153,7 @@ export class AppLogger extends ConsoleLogger {
     }
 
     if (
+      !this.closed &&
       this.loggerConfig.writeToFile &&
       this.logFd !== undefined &&
       this.errorFd !== undefined

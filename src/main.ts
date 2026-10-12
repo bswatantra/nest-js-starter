@@ -9,10 +9,11 @@ import { ObserveInstrument } from './observe';
 
 export async function bootstrap(): Promise<void> {
   const { port } = getAppConfig();
+  const logger = new AppLogger();
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     instrument: ObserveInstrument,
-    logger: new AppLogger(),
+    logger,
   });
 
   app.disable('x-powered-by');
@@ -23,6 +24,7 @@ export async function bootstrap(): Promise<void> {
   const server = (await app.listen(port)) as Server;
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 66_000;
+  server.once('close', () => logger.close());
 }
 
 await bootstrap();

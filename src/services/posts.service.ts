@@ -1,11 +1,7 @@
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService, handlePrismaError } from '@/models/prisma.service';
-import {
-  CACHE_KEYS,
-  CacheService,
-  calculatePaginationOffset,
-} from './cache.service';
+import { CACHE_KEYS, CacheService, normalizePagination } from './cache.service';
 import type {
   PostModel,
   PostWithAuthorModel,
@@ -60,10 +56,16 @@ export class PostsService {
   }
 
   async findAll(page = 1, limit = 50): Promise<PostWithAuthorSummaryModel[]> {
-    return this.readThrough(CACHE_KEYS.postList(page, limit), () =>
+    const {
+      page: safePage,
+      limit: safeLimit,
+      skip,
+    } = normalizePagination(page, limit);
+
+    return this.readThrough(CACHE_KEYS.postList(safePage, safeLimit), () =>
       this.prisma.post.findMany({
-        skip: calculatePaginationOffset(page, limit),
-        take: limit,
+        skip,
+        take: safeLimit,
         include: {
           author: {
             select: { id: true, name: true, email: true },

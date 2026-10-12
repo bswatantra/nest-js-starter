@@ -52,6 +52,16 @@ interface ParsedUrlMetadata {
   schema?: string;
 }
 
+interface SqlDriverDefaults {
+  envPrefix: 'MYSQL' | 'POSTGRES';
+  isActive: boolean;
+  defaultPort: number;
+  defaultUser: string;
+  urlMeta: ParsedUrlMetadata;
+  poolSize: number;
+  poolTimeout: number;
+}
+
 function resolveDriver(rawDriver: string | undefined): DatabaseDriver {
   const normalized = rawDriver?.trim().toLowerCase();
   if (normalized === 'mysql') {
@@ -90,6 +100,51 @@ function parseUrlMetadata(rawUrl: string | undefined): ParsedUrlMetadata {
   } catch {
     return {};
   }
+}
+
+function resolveSqlBaseConfig(
+  options: SqlDriverDefaults,
+): Omit<SqlConnectionFields, 'url'> {
+  const {
+    envPrefix,
+    isActive,
+    defaultPort,
+    defaultUser,
+    urlMeta,
+    poolSize,
+    poolTimeout,
+  } = options;
+
+  return {
+    host:
+      process.env[`${envPrefix}_HOST`] ??
+      process.env['DB_HOST'] ??
+      urlMeta.host ??
+      '127.0.0.1',
+    port: Number(
+      process.env[`${envPrefix}_PORT`] ??
+        (isActive ? process.env['DB_PORT'] : undefined) ??
+        urlMeta.port ??
+        defaultPort,
+    ),
+    username:
+      process.env[`${envPrefix}_USERNAME`] ??
+      process.env['DB_USERNAME'] ??
+      urlMeta.username ??
+      defaultUser,
+    password:
+      process.env[`${envPrefix}_PASSWORD`] ??
+      process.env['DB_PASSWORD'] ??
+      urlMeta.password ??
+      '',
+    database:
+      process.env[`${envPrefix}_DATABASE`] ??
+      process.env['DB_DATABASE'] ??
+      urlMeta.database ??
+      'nest_learning',
+    poolSize,
+    poolTimeout,
+  };
 }
 
 function ensurePgBouncerParam(url: string, host: string): string {
@@ -155,46 +210,22 @@ export function getDatabaseConfig(): DatabaseConfig {
     (activeDriver === 'mysql' && envDatabaseUrl?.startsWith('mysql://')
       ? envDatabaseUrl
       : undefined);
-  const mysqlUrlMeta = parseUrlMetadata(explicitMysqlUrl);
-
-  const mysqlBase: Omit<MysqlConnectionConfig, 'url'> = {
-    driver: 'mysql',
-    host:
-      process.env['MYSQL_HOST'] ??
-      process.env['DB_HOST'] ??
-      mysqlUrlMeta.host ??
-      '127.0.0.1',
-    port: Number(
-      process.env['MYSQL_PORT'] ??
-        (activeDriver === 'mysql' ? process.env['DB_PORT'] : undefined) ??
-        mysqlUrlMeta.port ??
-        3306,
-    ),
-    username:
-      process.env['MYSQL_USERNAME'] ??
-      process.env['DB_USERNAME'] ??
-      mysqlUrlMeta.username ??
-      'root',
-    password:
-      process.env['MYSQL_PASSWORD'] ??
-      process.env['DB_PASSWORD'] ??
-      mysqlUrlMeta.password ??
-      '',
-    database:
-      process.env['MYSQL_DATABASE'] ??
-      process.env['DB_DATABASE'] ??
-      mysqlUrlMeta.database ??
-      'nest_learning',
+  const mysqlBase = resolveSqlBaseConfig({
+    envPrefix: 'MYSQL',
+    isActive: activeDriver === 'mysql',
+    defaultPort: 3306,
+    defaultUser: 'root',
+    urlMeta: parseUrlMetadata(explicitMysqlUrl),
     poolSize,
     poolTimeout,
-  };
-  const mysqlUrl =
-    explicitMysqlUrl ??
-    buildSqlConnectionUrl('mysql', mysqlBase, { appendPoolParams });
+  });
 
   const mysqlConfig: MysqlConnectionConfig = {
+    driver: 'mysql',
     ...mysqlBase,
-    url: mysqlUrl,
+    url:
+      explicitMysqlUrl ??
+      buildSqlConnectionUrl('mysql', mysqlBase, { appendPoolParams }),
   };
 
   // 3. PostgreSQL Configuration
@@ -206,57 +237,33 @@ export function getDatabaseConfig(): DatabaseConfig {
       ? envDatabaseUrl
       : undefined);
   const pgUrlMeta = parseUrlMetadata(explicitPostgresqlUrl);
-
-  const postgresqlBase: Omit<PostgresqlConnectionConfig, 'url'> = {
-    driver: 'postgresql',
-    host:
-      process.env['POSTGRES_HOST'] ??
-      process.env['DB_HOST'] ??
-      pgUrlMeta.host ??
-      '127.0.0.1',
-    port: Number(
-      process.env['POSTGRES_PORT'] ??
-        (activeDriver === 'postgresql' ? process.env['DB_PORT'] : undefined) ??
-        pgUrlMeta.port ??
-        5432,
-    ),
-    username:
-      process.env['POSTGRES_USERNAME'] ??
-      process.env['DB_USERNAME'] ??
-      pgUrlMeta.username ??
-      'postgres',
-    password:
-      process.env['POSTGRES_PASSWORD'] ??
-      process.env['DB_PASSWORD'] ??
-      pgUrlMeta.password ??
-      '',
-    database:
-      process.env['POSTGRES_DATABASE'] ??
-      process.env['DB_DATABASE'] ??
-      pgUrlMeta.database ??
-      'nest_learning',
-    schema:
-      process.env['POSTGRES_SCHEMA'] ??
-      process.env['DB_SCHEMA'] ??
-      pgUrlMeta.schema ??
-      'public',
+  const postgresqlBase = resolveSqlBaseConfig({
+    envPrefix: 'POSTGRES',
+    isActive: activeDriver === 'postgresql',
+    defaultPort: 5432,
+    defaultUser: 'postgres',
+    urlMeta: pgUrlMeta,
     poolSize,
     poolTimeout,
-  };
+  });
+  const schema =
+    process.env['POSTGRES_SCHEMA'] ??
+    process.env['DB_SCHEMA'] ??
+    pgUrlMeta.schema ??
+    'public';
+
   const rawPostgresqlUrl =
     explicitPostgresqlUrl ??
     buildSqlConnectionUrl('postgresql', postgresqlBase, {
-      schema: postgresqlBase.schema,
+      schema,
       appendPoolParams,
     });
-  const postgresqlUrl = ensurePgBouncerParam(
-    rawPostgresqlUrl,
-    postgresqlBase.host,
-  );
 
   const postgresqlConfig: PostgresqlConnectionConfig = {
+    driver: 'postgresql',
     ...postgresqlBase,
-    url: postgresqlUrl,
+    schema,
+    url: ensurePgBouncerParam(rawPostgresqlUrl, postgresqlBase.host),
   };
 
   return {

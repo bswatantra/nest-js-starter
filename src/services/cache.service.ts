@@ -6,6 +6,12 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
+export interface PaginationParams {
+  page: number;
+  limit: number;
+  skip: number;
+}
+
 export const CACHE_KEYS = {
   USERS_LIST_PREFIX: 'users:list:',
   USERS_ID_PREFIX: 'users:id:',
@@ -22,8 +28,24 @@ export const CACHE_KEYS = {
   postByAuthor: (authorId: number): string => `posts:author:${authorId}`,
 } as const;
 
-export function calculatePaginationOffset(page: number, limit: number): number {
-  return Math.max(0, (page - 1) * limit);
+export function normalizePagination(
+  rawPage = 1,
+  rawLimit = 50,
+): PaginationParams {
+  const parsedPage = Number(rawPage);
+  const parsedLimit = Number(rawLimit);
+  const page =
+    Number.isFinite(parsedPage) && parsedPage >= 1 ? Math.floor(parsedPage) : 1;
+  const limit =
+    Number.isFinite(parsedLimit) && parsedLimit >= 1
+      ? Math.min(100, Math.floor(parsedLimit))
+      : 50;
+
+  return {
+    page,
+    limit,
+    skip: (page - 1) * limit,
+  };
 }
 
 @Injectable()
