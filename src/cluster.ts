@@ -3,10 +3,14 @@ import { availableParallelism } from 'node:os';
 import { Logger } from '@nestjs/common';
 
 const logger = new Logger('Cluster');
-const numCPUs = Number(process.env['CLUSTER_WORKERS'] ?? availableParallelism());
+const numCPUs = Number(
+  process.env['CLUSTER_WORKERS'] ?? availableParallelism(),
+);
 
 if (cluster.isPrimary) {
-  logger.log(`Primary process ${process.pid} is running — forking ${numCPUs} workers`);
+  logger.log(
+    `Primary process ${process.pid} is running — forking ${numCPUs} workers`,
+  );
 
   for (let i = 0; i < numCPUs; i++) {
     cluster.fork();
@@ -21,4 +25,3 @@ if (cluster.isPrimary) {
 } else {
   await import('./main');
 }
-

@@ -11,4 +11,3 @@ export type UserWithCountModel = PrismaUser & {
     posts: number;
   };
 };
-

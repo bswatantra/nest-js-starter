@@ -51,4 +51,3 @@ export class CacheService {
     this.store.clear();
   }
 }
-

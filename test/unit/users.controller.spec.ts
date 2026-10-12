@@ -37,7 +37,12 @@ describe('UsersController', () => {
 
   it('should create a user', async () => {
     const dto = { email: 'test@example.com', name: 'Test User' };
-    const expected = { id: 1, ...dto, createdAt: new Date(), updatedAt: new Date() };
+    const expected = {
+      id: 1,
+      ...dto,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
 
     mockUsersService.create.mockResolvedValue(expected);
 

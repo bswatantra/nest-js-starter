@@ -9,4 +9,3 @@ export type PostWithAuthorModel = PrismaPost & {
 export type PostWithAuthorSummaryModel = PrismaPost & {
   author: Pick<PrismaUser, 'id' | 'name' | 'email'>;
 };
-

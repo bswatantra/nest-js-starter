@@ -37,8 +37,18 @@ describe('PostsController', () => {
   });
 
   it('should create a post', async () => {
-    const dto = { title: 'New Post', content: 'Content', authorId: 1, published: true };
-    const expected = { id: 1, ...dto, createdAt: new Date(), updatedAt: new Date() };
+    const dto = {
+      title: 'New Post',
+      content: 'Content',
+      authorId: 1,
+      published: true,
+    };
+    const expected = {
+      id: 1,
+      ...dto,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
 
     mockPostsService.create.mockResolvedValue(expected);
 

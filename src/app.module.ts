@@ -30,11 +30,7 @@ import { LoggingInterceptor } from '@/interceptors';
       serviceId: 'nest-learing',
     }),
   ],
-  controllers: [
-    HealthController,
-    UsersController,
-    PostsController,
-  ],
+  controllers: [HealthController, UsersController, PostsController],
   providers: [
     // Models / ORM & Caching
     PrismaService,

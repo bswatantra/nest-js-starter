@@ -1,9 +1,4 @@
-import {
-  IsBoolean,
-  IsOptional,
-  IsString,
-  MinLength,
-} from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class UpdatePostDto {
   @IsString({ message: 'Title must be a string' })
@@ -19,4 +14,3 @@ export class UpdatePostDto {
   @IsOptional()
   published?: boolean;
 }
-

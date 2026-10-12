@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getDatabaseConfig, getDatabaseConnection } from '@/config/database.config';
+import {
+  getDatabaseConfig,
+  getDatabaseConnection,
+} from '@/config/database.config';
 
 describe('Database Configuration (Multi-DB)', () => {
   const originalEnv = { ...process.env };
@@ -41,7 +44,9 @@ describe('Database Configuration (Multi-DB)', () => {
 
     const active = getDatabaseConnection();
     expect(active.driver).toBe('mysql');
-    expect(active.url).toBe('mysql://admin:secret123@db.mysql.local:3307/shop_db');
+    expect(active.url).toBe(
+      'mysql://admin:secret123@db.mysql.local:3307/shop_db',
+    );
 
     const mysqlConn = getDatabaseConnection('mysql');
     expect(mysqlConn.host).toBe('db.mysql.local');

@@ -11,4 +11,3 @@ export function getAppConfig(): AppConfig {
     env: process.env['NODE_ENV'] ?? 'development',
   };
 }
-

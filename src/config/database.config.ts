@@ -35,9 +35,7 @@ export interface PostgresqlConnectionConfig {
 }
 
 export type DatabaseConnectionConfig =
-  | SqliteConnectionConfig
-  | MysqlConnectionConfig
-  | PostgresqlConnectionConfig;
+  SqliteConnectionConfig | MysqlConnectionConfig | PostgresqlConnectionConfig;
 
 export interface DatabaseConnectionsMap {
   sqlite: SqliteConnectionConfig;

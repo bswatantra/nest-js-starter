@@ -26,4 +26,3 @@ export class CreatePostDto {
   @IsOptional()
   published?: boolean;
 }
-
