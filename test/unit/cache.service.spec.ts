@@ -1,7 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
+import { Test } from '@nestjs/testing';
 import { CacheService, normalizePagination } from '@/services/cache.service';
 
 describe('CacheService & normalizePagination', () => {
+  it('can be instantiated by the NestJS DI container without arguments', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [CacheService],
+    }).compile();
+
+    const cache = moduleRef.get<CacheService>(CacheService);
+    expect(cache).toBeInstanceOf(CacheService);
+  });
+
   it('evicts the least recently used (LRU) entry when capacity is reached', () => {
     const cache = new CacheService(2, 10_000);
 

@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 
 interface CacheEntry<T> {
   value: T;
@@ -55,8 +55,11 @@ export class CacheService {
   private readonly maxEntries: number;
   private readonly defaultTtlMs: number;
 
-  constructor(maxEntries = 1000, defaultTtlMs?: number) {
-    this.maxEntries = maxEntries;
+  constructor(
+    @Optional() maxEntries?: number,
+    @Optional() defaultTtlMs?: number,
+  ) {
+    this.maxEntries = maxEntries ?? 1000;
     this.defaultTtlMs =
       defaultTtlMs ?? Number(process.env['CACHE_TTL_MS'] ?? 5_000);
   }
