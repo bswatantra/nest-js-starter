@@ -1,15 +1,41 @@
 import {
+  ConflictException,
   Injectable,
   Logger,
+  NotFoundException,
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import {
   getDatabaseConnection,
   type DatabaseConnectionConfig,
   type DatabaseDriver,
 } from '@/config';
+
+export interface PrismaErrorMessages {
+  conflict?: string;
+  notFound?: string;
+  foreignKeyNotFound?: string;
+}
+
+export function handlePrismaError(
+  error: unknown,
+  messages: PrismaErrorMessages,
+): never {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === 'P2002' && messages.conflict) {
+      throw new ConflictException(messages.conflict);
+    }
+    if (error.code === 'P2025' && messages.notFound) {
+      throw new NotFoundException(messages.notFound);
+    }
+    if (error.code === 'P2003' && messages.foreignKeyNotFound) {
+      throw new NotFoundException(messages.foreignKeyNotFound);
+    }
+  }
+  throw error;
+}
 
 @Injectable()
 export class PrismaService

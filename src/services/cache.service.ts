@@ -6,6 +6,26 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
+export const CACHE_KEYS = {
+  USERS_LIST_PREFIX: 'users:list:',
+  USERS_ID_PREFIX: 'users:id:',
+  POSTS_PREFIX: 'posts:',
+  POSTS_LIST_PREFIX: 'posts:list:',
+  POSTS_ID_PREFIX: 'posts:id:',
+  POSTS_AUTHOR_PREFIX: 'posts:author:',
+  userList: (page: number, limit: number): string =>
+    `users:list:${page}:${limit}`,
+  userId: (id: number): string => `users:id:${id}`,
+  postList: (page: number, limit: number): string =>
+    `posts:list:${page}:${limit}`,
+  postId: (id: number): string => `posts:id:${id}`,
+  postByAuthor: (authorId: number): string => `posts:author:${authorId}`,
+} as const;
+
+export function calculatePaginationOffset(page: number, limit: number): number {
+  return Math.max(0, (page - 1) * limit);
+}
+
 @Injectable()
 export class CacheService {
   private readonly store = new Map<string, CacheEntry<unknown>>();
@@ -38,6 +58,21 @@ export class CacheService {
       value,
       expiresAt: Date.now() + ttlMs,
     });
+  }
+
+  async getOrSet<T>(
+    key: string,
+    fetcher: () => Promise<T>,
+    ttlMs: number = this.defaultTtlMs,
+  ): Promise<T> {
+    const cached = this.get<T>(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const value = await fetcher();
+    this.set(key, value, ttlMs);
+    return value;
   }
 
   delete(key: string): void {

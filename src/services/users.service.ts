@@ -1,12 +1,11 @@
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
+import { PrismaService, handlePrismaError } from '@/models/prisma.service';
 import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-  Optional,
-} from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '@/models/prisma.service';
-import { CacheService } from './cache.service';
+  CACHE_KEYS,
+  CacheService,
+  calculatePaginationOffset,
+} from './cache.service';
 import type {
   UserModel,
   UserWithPostsModel,
@@ -16,13 +15,14 @@ import type { CreateUserDto, UpdateUserDto } from '@/dto';
 
 @Injectable()
 export class UsersService {
-  private static readonly CACHE_LIST_PREFIX = 'users:list:';
-  private static readonly CACHE_ID_PREFIX = 'users:id:';
-
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly cache?: CacheService,
   ) {}
+
+  private readThrough<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+    return this.cache ? this.cache.getOrSet(key, fetcher) : fetcher();
+  }
 
   async create(createUserDto: CreateUserDto): Promise<UserModel> {
     try {
@@ -32,71 +32,52 @@ export class UsersService {
           name: createUserDto.name,
         },
       });
-      this.cache?.invalidatePrefix(UsersService.CACHE_LIST_PREFIX);
-      this.cache?.set<UserWithPostsModel>(
-        `${UsersService.CACHE_ID_PREFIX}${user.id}`,
-        { ...user, posts: [] },
-      );
+      this.cache?.invalidatePrefix(CACHE_KEYS.USERS_LIST_PREFIX);
+      this.cache?.set<UserWithPostsModel>(CACHE_KEYS.userId(user.id), {
+        ...user,
+        posts: [],
+      });
       return user;
     } catch (error: unknown) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException(
-          `User with email "${createUserDto.email}" already exists`,
-        );
-      }
-      throw error;
+      handlePrismaError(error, {
+        conflict: `User with email "${createUserDto.email}" already exists`,
+      });
     }
   }
 
   async findAll(page = 1, limit = 50): Promise<UserWithCountModel[]> {
-    const cacheKey = `${UsersService.CACHE_LIST_PREFIX}${page}:${limit}`;
-    const cached = this.cache?.get<UserWithCountModel[]>(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const skip = Math.max(0, (page - 1) * limit);
-    const users = await this.prisma.user.findMany({
-      skip,
-      take: limit,
-      include: {
-        _count: {
-          select: { posts: true },
+    return this.readThrough(CACHE_KEYS.userList(page, limit), () =>
+      this.prisma.user.findMany({
+        skip: calculatePaginationOffset(page, limit),
+        take: limit,
+        include: {
+          _count: {
+            select: { posts: true },
+          },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    this.cache?.set(cacheKey, users);
-    return users;
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
   }
 
   async findOne(id: number): Promise<UserWithPostsModel> {
-    const cacheKey = `${UsersService.CACHE_ID_PREFIX}${id}`;
-    const cached = this.cache?.get<UserWithPostsModel>(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id },
-      include: {
-        posts: {
-          take: 50,
-          orderBy: { createdAt: 'desc' },
+    return this.readThrough(CACHE_KEYS.userId(id), async () => {
+      const user = await this.prisma.user.findUnique({
+        where: { id },
+        include: {
+          posts: {
+            take: 50,
+            orderBy: { createdAt: 'desc' },
+          },
         },
-      },
+      });
+
+      if (!user) {
+        throw new NotFoundException(`User with ID ${id} not found`);
+      }
+
+      return user;
     });
-
-    if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
-    }
-
-    this.cache?.set(cacheKey, user);
-    return user;
   }
 
   async update(id: number, updateUserDto: UpdateUserDto): Promise<UserModel> {
@@ -109,41 +90,30 @@ export class UsersService {
         where: { id },
         data,
       });
-      this.cache?.delete(`${UsersService.CACHE_ID_PREFIX}${id}`);
-      this.cache?.invalidatePrefix(UsersService.CACHE_LIST_PREFIX);
-      this.cache?.invalidatePrefix('posts:list:');
-      this.cache?.invalidatePrefix('posts:id:');
+      this.cache?.delete(CACHE_KEYS.userId(id));
+      this.cache?.invalidatePrefix(CACHE_KEYS.USERS_LIST_PREFIX);
+      this.cache?.invalidatePrefix(CACHE_KEYS.POSTS_LIST_PREFIX);
+      this.cache?.invalidatePrefix(CACHE_KEYS.POSTS_ID_PREFIX);
       return updated;
     } catch (error: unknown) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2025') {
-          throw new NotFoundException(`User with ID ${id} not found`);
-        }
-        if (error.code === 'P2002') {
-          throw new ConflictException(
-            `Email "${updateUserDto.email}" is already used by another user`,
-          );
-        }
-      }
-      throw error;
+      handlePrismaError(error, {
+        notFound: `User with ID ${id} not found`,
+        conflict: `Email "${String(updateUserDto.email)}" is already used by another user`,
+      });
     }
   }
 
   async remove(id: number): Promise<{ message: string }> {
     try {
       await this.prisma.user.delete({ where: { id } });
-      this.cache?.delete(`${UsersService.CACHE_ID_PREFIX}${id}`);
-      this.cache?.invalidatePrefix(UsersService.CACHE_LIST_PREFIX);
-      this.cache?.invalidatePrefix('posts:');
+      this.cache?.delete(CACHE_KEYS.userId(id));
+      this.cache?.invalidatePrefix(CACHE_KEYS.USERS_LIST_PREFIX);
+      this.cache?.invalidatePrefix(CACHE_KEYS.POSTS_PREFIX);
       return { message: `User with ID ${id} successfully deleted` };
     } catch (error: unknown) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2025'
-      ) {
-        throw new NotFoundException(`User with ID ${id} not found`);
-      }
-      throw error;
+      handlePrismaError(error, {
+        notFound: `User with ID ${id} not found`,
+      });
     }
   }
 }

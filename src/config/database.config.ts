@@ -9,8 +9,7 @@ export interface SqliteConnectionConfig {
   url: string;
 }
 
-export interface MysqlConnectionConfig {
-  driver: 'mysql';
+export interface SqlConnectionFields {
   host: string;
   port: number;
   username: string;
@@ -21,17 +20,13 @@ export interface MysqlConnectionConfig {
   url: string;
 }
 
-export interface PostgresqlConnectionConfig {
+export interface MysqlConnectionConfig extends SqlConnectionFields {
+  driver: 'mysql';
+}
+
+export interface PostgresqlConnectionConfig extends SqlConnectionFields {
   driver: 'postgresql';
-  host: string;
-  port: number;
-  username: string;
-  password: string;
-  database: string;
   schema: string;
-  poolSize: number;
-  poolTimeout: number;
-  url: string;
 }
 
 export type DatabaseConnectionConfig =
@@ -105,32 +100,28 @@ function ensurePgBouncerParam(url: string, host: string): string {
   return `${url}${separator}pgbouncer=true`;
 }
 
-function buildMysqlUrl(
-  config: Omit<MysqlConnectionConfig, 'url'>,
-  appendPoolParams: boolean,
+function buildSqlConnectionUrl(
+  protocol: 'mysql' | 'postgresql',
+  config: Omit<SqlConnectionFields, 'url'>,
+  options: { schema?: string; appendPoolParams: boolean },
 ): string {
   const auth = config.password
     ? `${encodeURIComponent(config.username)}:${encodeURIComponent(config.password)}`
     : encodeURIComponent(config.username);
-  const base = `mysql://${auth}@${config.host}:${config.port}/${config.database}`;
-  if (!appendPoolParams) {
-    return base;
-  }
-  return `${base}?connection_limit=${config.poolSize}&pool_timeout=${config.poolTimeout}`;
-}
+  const base = `${protocol}://${auth}@${config.host}:${config.port}/${config.database}`;
+  const queryParams: string[] = [];
 
-function buildPostgresqlUrl(
-  config: Omit<PostgresqlConnectionConfig, 'url'>,
-  appendPoolParams: boolean,
-): string {
-  const auth = config.password
-    ? `${encodeURIComponent(config.username)}:${encodeURIComponent(config.password)}`
-    : encodeURIComponent(config.username);
-  const base = `postgresql://${auth}@${config.host}:${config.port}/${config.database}?schema=${encodeURIComponent(config.schema)}`;
-  if (!appendPoolParams) {
-    return base;
+  if (options.schema) {
+    queryParams.push(`schema=${encodeURIComponent(options.schema)}`);
   }
-  return `${base}&connection_limit=${config.poolSize}&pool_timeout=${config.poolTimeout}`;
+  if (options.appendPoolParams) {
+    queryParams.push(
+      `connection_limit=${config.poolSize}`,
+      `pool_timeout=${config.poolTimeout}`,
+    );
+  }
+
+  return queryParams.length > 0 ? `${base}?${queryParams.join('&')}` : base;
 }
 
 export function getDatabaseConfig(): DatabaseConfig {
@@ -198,7 +189,8 @@ export function getDatabaseConfig(): DatabaseConfig {
     poolTimeout,
   };
   const mysqlUrl =
-    explicitMysqlUrl ?? buildMysqlUrl(mysqlBase, appendPoolParams);
+    explicitMysqlUrl ??
+    buildSqlConnectionUrl('mysql', mysqlBase, { appendPoolParams });
 
   const mysqlConfig: MysqlConnectionConfig = {
     ...mysqlBase,
@@ -253,7 +245,10 @@ export function getDatabaseConfig(): DatabaseConfig {
   };
   const rawPostgresqlUrl =
     explicitPostgresqlUrl ??
-    buildPostgresqlUrl(postgresqlBase, appendPoolParams);
+    buildSqlConnectionUrl('postgresql', postgresqlBase, {
+      schema: postgresqlBase.schema,
+      appendPoolParams,
+    });
   const postgresqlUrl = ensurePgBouncerParam(
     rawPostgresqlUrl,
     postgresqlBase.host,

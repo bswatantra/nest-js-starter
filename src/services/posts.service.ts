@@ -1,7 +1,11 @@
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '@/models/prisma.service';
-import { CacheService } from './cache.service';
+import type { Prisma } from '@prisma/client';
+import { PrismaService, handlePrismaError } from '@/models/prisma.service';
+import {
+  CACHE_KEYS,
+  CacheService,
+  calculatePaginationOffset,
+} from './cache.service';
 import type {
   PostModel,
   PostWithAuthorModel,
@@ -11,24 +15,24 @@ import type { CreatePostDto, UpdatePostDto } from '@/dto';
 
 @Injectable()
 export class PostsService {
-  private static readonly CACHE_LIST_PREFIX = 'posts:list:';
-  private static readonly CACHE_ID_PREFIX = 'posts:id:';
-  private static readonly CACHE_AUTHOR_PREFIX = 'posts:author:';
-
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly cache?: CacheService,
   ) {}
 
+  private readThrough<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+    return this.cache ? this.cache.getOrSet(key, fetcher) : fetcher();
+  }
+
   private invalidateAuthorAndListCaches(authorId?: number): void {
-    this.cache?.invalidatePrefix(PostsService.CACHE_LIST_PREFIX);
-    this.cache?.invalidatePrefix('users:list:');
+    this.cache?.invalidatePrefix(CACHE_KEYS.POSTS_LIST_PREFIX);
+    this.cache?.invalidatePrefix(CACHE_KEYS.USERS_LIST_PREFIX);
     if (authorId !== undefined) {
-      this.cache?.delete(`${PostsService.CACHE_AUTHOR_PREFIX}${authorId}`);
-      this.cache?.delete(`users:id:${authorId}`);
+      this.cache?.delete(CACHE_KEYS.postByAuthor(authorId));
+      this.cache?.delete(CACHE_KEYS.userId(authorId));
     } else {
-      this.cache?.invalidatePrefix(PostsService.CACHE_AUTHOR_PREFIX);
-      this.cache?.invalidatePrefix('users:id:');
+      this.cache?.invalidatePrefix(CACHE_KEYS.POSTS_AUTHOR_PREFIX);
+      this.cache?.invalidatePrefix(CACHE_KEYS.USERS_ID_PREFIX);
     }
   }
 
@@ -46,88 +50,64 @@ export class PostsService {
         },
       });
       this.invalidateAuthorAndListCaches(post.authorId);
-      this.cache?.set(`${PostsService.CACHE_ID_PREFIX}${post.id}`, post);
+      this.cache?.set(CACHE_KEYS.postId(post.id), post);
       return post;
     } catch (error: unknown) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2003'
-      ) {
-        throw new NotFoundException(
-          `Author with ID ${createPostDto.authorId} not found`,
-        );
-      }
-      throw error;
+      handlePrismaError(error, {
+        foreignKeyNotFound: `Author with ID ${createPostDto.authorId} not found`,
+      });
     }
   }
 
   async findAll(page = 1, limit = 50): Promise<PostWithAuthorSummaryModel[]> {
-    const cacheKey = `${PostsService.CACHE_LIST_PREFIX}${page}:${limit}`;
-    const cached = this.cache?.get<PostWithAuthorSummaryModel[]>(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const skip = Math.max(0, (page - 1) * limit);
-    const posts = await this.prisma.post.findMany({
-      skip,
-      take: limit,
-      include: {
-        author: {
-          select: { id: true, name: true, email: true },
+    return this.readThrough(CACHE_KEYS.postList(page, limit), () =>
+      this.prisma.post.findMany({
+        skip: calculatePaginationOffset(page, limit),
+        take: limit,
+        include: {
+          author: {
+            select: { id: true, name: true, email: true },
+          },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    this.cache?.set(cacheKey, posts);
-    return posts;
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
   }
 
   async findOne(id: number): Promise<PostWithAuthorModel> {
-    const cacheKey = `${PostsService.CACHE_ID_PREFIX}${id}`;
-    const cached = this.cache?.get<PostWithAuthorModel>(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    return this.readThrough(CACHE_KEYS.postId(id), async () => {
+      const post = await this.prisma.post.findUnique({
+        where: { id },
+        include: {
+          author: true,
+        },
+      });
 
-    const post = await this.prisma.post.findUnique({
-      where: { id },
-      include: {
-        author: true,
-      },
+      if (!post) {
+        throw new NotFoundException(`Post with ID ${id} not found`);
+      }
+
+      return post;
     });
-
-    if (!post) {
-      throw new NotFoundException(`Post with ID ${id} not found`);
-    }
-
-    this.cache?.set(cacheKey, post);
-    return post;
   }
 
   async findByAuthor(authorId: number): Promise<PostModel[]> {
-    const cacheKey = `${PostsService.CACHE_AUTHOR_PREFIX}${authorId}`;
-    const cached = this.cache?.get<PostModel[]>(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const authorWithPosts = await this.prisma.user.findUnique({
-      where: { id: authorId },
-      select: {
-        posts: {
-          orderBy: { createdAt: 'desc' },
+    return this.readThrough(CACHE_KEYS.postByAuthor(authorId), async () => {
+      const authorWithPosts = await this.prisma.user.findUnique({
+        where: { id: authorId },
+        select: {
+          posts: {
+            orderBy: { createdAt: 'desc' },
+          },
         },
-      },
+      });
+
+      if (!authorWithPosts) {
+        throw new NotFoundException(`Author with ID ${authorId} not found`);
+      }
+
+      return authorWithPosts.posts;
     });
-
-    if (!authorWithPosts) {
-      throw new NotFoundException(`Author with ID ${authorId} not found`);
-    }
-
-    this.cache?.set(cacheKey, authorWithPosts.posts);
-    return authorWithPosts.posts;
   }
 
   async update(
@@ -150,33 +130,25 @@ export class PostsService {
         },
       });
       this.invalidateAuthorAndListCaches(updated.authorId);
-      this.cache?.set(`${PostsService.CACHE_ID_PREFIX}${id}`, updated);
+      this.cache?.set(CACHE_KEYS.postId(id), updated);
       return updated;
     } catch (error: unknown) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2025'
-      ) {
-        throw new NotFoundException(`Post with ID ${id} not found`);
-      }
-      throw error;
+      handlePrismaError(error, {
+        notFound: `Post with ID ${id} not found`,
+      });
     }
   }
 
   async remove(id: number): Promise<{ message: string }> {
     try {
       const deleted = await this.prisma.post.delete({ where: { id } });
-      this.cache?.delete(`${PostsService.CACHE_ID_PREFIX}${id}`);
+      this.cache?.delete(CACHE_KEYS.postId(id));
       this.invalidateAuthorAndListCaches(deleted.authorId);
       return { message: `Post with ID ${id} successfully deleted` };
     } catch (error: unknown) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2025'
-      ) {
-        throw new NotFoundException(`Post with ID ${id} not found`);
-      }
-      throw error;
+      handlePrismaError(error, {
+        notFound: `Post with ID ${id} not found`,
+      });
     }
   }
 }
