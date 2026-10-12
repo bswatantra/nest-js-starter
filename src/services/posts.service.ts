@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
 import { PrismaService, handlePrismaError } from '@/models/prisma.service';
 import { CACHE_KEYS, CacheService, normalizePagination } from './cache.service';
 import type {
@@ -116,17 +115,10 @@ export class PostsService {
     id: number,
     updatePostDto: UpdatePostDto,
   ): Promise<PostWithAuthorModel> {
-    const data: Prisma.PostUpdateInput = {};
-    if (updatePostDto.title !== undefined) data.title = updatePostDto.title;
-    if (updatePostDto.content !== undefined)
-      data.content = updatePostDto.content;
-    if (updatePostDto.published !== undefined)
-      data.published = updatePostDto.published;
-
     try {
       const updated = await this.prisma.post.update({
         where: { id },
-        data,
+        data: updatePostDto,
         include: {
           author: true,
         },

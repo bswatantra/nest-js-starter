@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
 import { PrismaService, handlePrismaError } from '@/models/prisma.service';
 import { CACHE_KEYS, CacheService, normalizePagination } from './cache.service';
 import type {
@@ -83,14 +82,10 @@ export class UsersService {
   }
 
   async update(id: number, updateUserDto: UpdateUserDto): Promise<UserModel> {
-    const data: Prisma.UserUpdateInput = {};
-    if (updateUserDto.email !== undefined) data.email = updateUserDto.email;
-    if (updateUserDto.name !== undefined) data.name = updateUserDto.name;
-
     try {
       const updated = await this.prisma.user.update({
         where: { id },
-        data,
+        data: updateUserDto,
       });
       this.cache?.delete(CACHE_KEYS.userId(id));
       this.cache?.invalidatePrefix(CACHE_KEYS.USERS_LIST_PREFIX);

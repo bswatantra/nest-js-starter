@@ -1,13 +1,17 @@
 import cluster from 'node:cluster';
 import { availableParallelism } from 'node:os';
-import { Logger } from '@nestjs/common';
+import { AppLogger } from '@/config';
 
-const logger = new Logger('Cluster');
+const logger = new AppLogger();
+logger.setContext('Cluster');
+
 const numCPUs = Number(
   process.env['CLUSTER_WORKERS'] ?? availableParallelism(),
 );
 
 if (cluster.isPrimary) {
+  let isShuttingDown = false;
+
   logger.log(
     `Primary process ${process.pid} is running — forking ${numCPUs} workers`,
   );
@@ -16,9 +20,23 @@ if (cluster.isPrimary) {
     cluster.fork();
   }
 
+  const shutdown = (): void => {
+    isShuttingDown = true;
+    for (const worker of Object.values(cluster.workers ?? {})) {
+      worker?.kill();
+    }
+    logger.close();
+  };
+
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+
   cluster.on('exit', (worker, code, signal) => {
+    if (isShuttingDown) {
+      return;
+    }
     logger.warn(
-      `Worker ${worker.process.pid} exited (code: ${code}, signal: ${signal}). Respawning...`,
+      `Worker ${String(worker.process.pid)} exited (code: ${String(code)}, signal: ${String(signal)}). Respawning...`,
     );
     cluster.fork();
   });
