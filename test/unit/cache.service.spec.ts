@@ -34,15 +34,23 @@ describe('CacheService & normalizePagination', () => {
     }
   });
 
-  it('deduplicates fetcher calls with getOrSet', async () => {
+  it('deduplicates sequential and concurrent (in-flight stampede) fetcher calls with getOrSet', async () => {
     const cache = new CacheService(10, 10_000);
-    const fetcher = vi.fn().mockResolvedValue({ id: 1 });
+    const fetcher = vi.fn().mockImplementation(
+      () =>
+        new Promise<{ id: number }>((resolve) => {
+          setTimeout(() => resolve({ id: 1 }), 20);
+        }),
+    );
 
-    const first = await cache.getOrSet('user:1', fetcher);
-    const second = await cache.getOrSet('user:1', fetcher);
+    // Fire 10 concurrent calls while cache is cold
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => cache.getOrSet('user:1', fetcher)),
+    );
 
-    expect(first).toEqual({ id: 1 });
-    expect(second).toEqual({ id: 1 });
+    for (const res of results) {
+      expect(res).toEqual({ id: 1 });
+    }
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 

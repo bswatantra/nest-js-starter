@@ -51,6 +51,7 @@ export function normalizePagination(
 @Injectable()
 export class CacheService {
   private readonly store = new Map<string, CacheEntry<unknown>>();
+  private readonly inFlight = new Map<string, Promise<unknown>>();
   private readonly maxEntries: number;
   private readonly defaultTtlMs: number;
 
@@ -104,13 +105,27 @@ export class CacheService {
       return cached;
     }
 
-    const value = await fetcher();
-    this.set(key, value, ttlMs);
-    return value;
+    const existingPromise = this.inFlight.get(key) as Promise<T> | undefined;
+    if (existingPromise !== undefined) {
+      return existingPromise;
+    }
+
+    const fetchPromise = fetcher()
+      .then((value) => {
+        this.set(key, value, ttlMs);
+        return value;
+      })
+      .finally(() => {
+        this.inFlight.delete(key);
+      });
+
+    this.inFlight.set(key, fetchPromise);
+    return fetchPromise;
   }
 
   delete(key: string): void {
     this.store.delete(key);
+    this.inFlight.delete(key);
   }
 
   invalidatePrefix(prefix: string): void {
@@ -119,9 +134,15 @@ export class CacheService {
         this.store.delete(key);
       }
     }
+    for (const key of this.inFlight.keys()) {
+      if (key.startsWith(prefix)) {
+        this.inFlight.delete(key);
+      }
+    }
   }
 
   clear(): void {
     this.store.clear();
+    this.inFlight.clear();
   }
 }
